@@ -1,0 +1,2 @@
+# Windows系统（路径分隔符用;）
+pyinstaller -F -w --name "报告生成工具" --add-data "res;res" main.py
