@@ -754,15 +754,20 @@ class ReportGenerator:
             # 准备合并数据，删除重复的名称列
             df_curve_merge = df_curve_processed.drop('名称', axis=1, errors='ignore')
             df_total_merge = df_total.drop('名称', axis=1, errors='ignore')
+            # 对表1按"名称"分组，添加组内序号（从0开始计数）
+            df_curve_merge['序号'] = df_curve_merge.groupby('标准化名称').cumcount()
+            # 对表2做同样操作，保证同名行的序号一一对应
+            df_total_merge['序号'] = df_total_merge.groupby('标准化名称').cumcount()
             # 左连接，以分钟曲线数据为主
             df_combined = pd.merge(
                 df_curve_merge,
                 df_total_merge,
-                on='标准化名称',
+                on=['标准化名称','序号'],
                 how='left',
                 suffixes=('_curve', '_total')
             )
-
+            df_combined = df_combined.drop_duplicates(keep='first')
+            # print(df_combined.to_string())
             # 5. 列名映射 - 按照要求的输出格式
             print("\n正在整理输出格式...")
             # 定义列名映射关系
@@ -855,7 +860,7 @@ class ReportGenerator:
             return success,message,output_file
 
 if __name__ == "__main__":
-    EXCEL_FILE = "0101.xlsx"
+    EXCEL_FILE = "11111.xlsx"
     EXCEL_OUT_FILE = "0101_111.xlsx"
     WORD_TEMPLATE = "报告模板.docx"
 
