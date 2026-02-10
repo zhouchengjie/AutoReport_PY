@@ -9,6 +9,7 @@ from docx.enum.text import WD_COLOR_INDEX
 from datetime import datetime
 import re  # 新增这行，用于正则表达式处理
 import numpy as np  # 必须导入numpy，否则np.nan会报错
+import os
 
 class ReportGenerator:
     def __init__(self):
@@ -226,12 +227,7 @@ class ReportGenerator:
         elif isinstance(target_date, str):
             target_date = datetime.strptime(target_date, "%Y-%m-%d")
 
-        year = target_date.year
-        month = target_date.month
-        day = target_date.day
-        week_map = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
-        weekday = week_map[target_date.weekday()]
-        new_title_text = f"日报（{year}年 {month} 月 {day}日 {weekday}）"
+        new_title_text = self.GetTitleText(target_date)
 
         if doc.paragraphs:
             title_para = doc.paragraphs[0]
@@ -252,6 +248,24 @@ class ReportGenerator:
         else:
             print("⚠️  未找到标题段落")
 
+    def GetTitleText(self, target_date):
+        year = target_date.year
+        month = target_date.month
+        day = target_date.day
+        week_map = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+        weekday = week_map[target_date.weekday()]
+        new_title_text = f"日报（{year}年 {month} 月 {day}日 {weekday}）"
+        return new_title_text
+
+    def GetReportName(self, target_date):
+        year = target_date.year
+        month = target_date.month
+        day = target_date.day
+        week_map = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        weekday = week_map[target_date.weekday()]
+        # 【日报】xxxx年xx月xx日（周xx）
+        report_name = f"【日报】{year}年{month}月{day}日（{weekday}）.docx"
+        return report_name
 
     def fill_competitiveness_template(self, doc, share_df, change_df):
         """填充竞争力情况模板文字"""
@@ -336,7 +350,8 @@ class ReportGenerator:
         max_rate_name = self.replace_chars(max_rate_name, self.program_replacements)
         max_rank_name = self.replace_chars(max_rank_name, self.program_replacements)
         template_text2 = f"""全天{total_program_count}档节目中共{top1_count}档在全国排名第一。{max_rate_time}《{max_rate_name}》收视率较前一日提升{max_rate_increase}，收视率提升幅度最大；{max_rank_time}《{max_rank_name}》全国排名提升{max_rank_increase}位，排名提升幅度最大。"""
-
+        if max_rate_name == "异常" and max_rate_increase == "异常":
+            template_text2 = f"""全天{total_program_count}档节目中共{top1_count}档在全国排名第一。{max_rate_time}《{max_rate_name}》收视率较前一日提升{max_rate_increase}，收视率提升幅度最大。"""
         # 替换模板段落
         for idx, para in enumerate(doc.paragraphs):
             if "综合频道收视率【xx】%" in para.text:
@@ -496,10 +511,10 @@ class ReportGenerator:
                 dtype=str
             )
             report_date = totalrate_df.iloc[0, 1]
-            report_date = datetime.strptime(report_date, "%Y/%m/%d").strftime("%Y-%m-%d")
-            print(f"成功提取日期值：{report_date}")
+            report_date_fixed = datetime.strptime(report_date, "%Y/%m/%d").strftime("%Y-%m-%d")
+            print(f"成功提取日期值：{report_date_fixed}")
             # 替换标题
-            self.replace_report_title(doc, report_date)
+            self.replace_report_title(doc, report_date_fixed)
 
             # 填充模板文字
             self.fill_competitiveness_template(doc, share_df, change_df)
@@ -517,8 +532,10 @@ class ReportGenerator:
             self.clear_table_data(table3)
             self.insert_data_to_table(table3, drama_df, TABLE3_COLS, table_type=3)
 
-            output_word_path = f"日报_{report_date}.docx"
-
+            report_date = datetime.strptime(report_date, "%Y/%m/%d")
+            excel_dir = os.path.dirname(excel_path)
+            output_word_name = self.GetReportName(report_date)
+            output_word_path = os.path.join(excel_dir, output_word_name)
             # 保存文件
             doc.save(output_word_path)
             print(f"🎉 生成成功！文件：{output_word_path}")
@@ -721,7 +738,7 @@ class ReportGenerator:
         """
         success = False
         message = ""
-        output_file = ""
+        output_excel_path = ""
         try:
             # 1. 读取数据
             print("正在读取数据...")
@@ -843,16 +860,18 @@ class ReportGenerator:
                 # 若"平均忠实度"列不存在，给出提示且不报错
                 print("警告：DataFrame中不存在'平均忠实度'列，未插入空列")
             report_date = df_final.iloc[0, 1]
-            report_date = datetime.strptime(report_date, "%Y/%m/%d").strftime("%Y-%m-%d")
+            report_date = datetime.strptime(report_date, "%Y/%m/%d").strftime("%Y年%m月%d日")
             print(f"成功提取日期值：{report_date}")
-            output_file = f"合并曲线_{report_date}.xlsx"
+            excel_dir = os.path.dirname(input_file)
+            output_excel_name = f"{report_date}栏目收视率及分钟曲线.xlsx"
+            output_excel_path = os.path.join(excel_dir, output_excel_name)
             # 7. 保存输出文件
-            print(f"\n正在保存输出文件：{output_file}")
-            with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+            print(f"\n正在保存输出文件：{output_excel_path}")
+            with pd.ExcelWriter(output_excel_path, engine='openpyxl') as writer:
                 # 保存合并后的数据
                 df_final.to_excel(writer, sheet_name='合并后收视数据', index=False)
             success = True
-            return success,"",output_file
+            return success,"",output_excel_path
 
         except Exception as e:
             success = False
